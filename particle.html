@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>マウス追従パーティクル軌跡（軽量版）</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; 
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particleCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        const particles = [];
+        let mouse = {
+            x: canvas.width / 2,
+            y: canvas.height / 2
+        };
+
+        // マウスの最後の位置を記録するための変数
+        let lastMouse = { x: mouse.x, y: mouse.y }; 
+
+        document.addEventListener('mousemove', (event) => {
+            lastMouse.x = mouse.x;
+            lastMouse.y = mouse.y;
+            mouse.x = event.clientX;
+            mouse.y = event.clientY;
+        });
+
+        // パーティクルクラス
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // 初期速度をランダムに設定
+                this.vx = (Math.random() - 0.5) * 0.8; 
+                this.vy = (Math.random() - 0.5) * 0.8;
+                this.size = Math.random() * 3 + 0.5; // サイズを少し小さく戻す
+                this.life = 60; // 【変更】寿命を短くして、早く消滅させる
+                this.maxLife = this.life;
+                this.color = `rgba(0, ${Math.floor(Math.random() * 100) + 155}, 255, 0.7)`; 
+            }
+
+            // 更新
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                this.life--;
+                
+                // 【変更】摩擦を強め、動きを早く収束させる（0.98 -> 0.95）
+                this.vx *= 0.95; 
+                this.vy *= 0.95;
+                
+                this.size *= 0.98;
+            }
+
+            // 描画
+            draw() {
+                // 透明度を寿命に直接依存させ、初期の透明度（0.7）は一旦無視して軽量化
+                ctx.globalAlpha = this.life / this.maxLife; 
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // パーティクル生成ロジック
+        function spawnParticles() {
+            // マウスが動いた距離を計算 (ピタゴラスの定理)
+            const dx = mouse.x - lastMouse.x;
+            const dy = mouse.y - lastMouse.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // 【重要】動いた距離に基づいて生成数を決定
+            // 距離が離れるほど、パーティクルを多く生成し、軌跡を線で繋ぐようにする
+            const particlesToCreate = Math.min(Math.ceil(distance / 5), 10); 
+
+            if (distance > 0) {
+                for (let i = 0; i < particlesToCreate; i++) {
+                    // lastMouseとmouseの間の直線上の補間位置に生成
+                    const t = i / particlesToCreate;
+                    const x = lastMouse.x + dx * t;
+                    const y = lastMouse.y + dy * t;
+                    particles.push(new Particle(x, y));
+                }
+            } else {
+                 // マウスが止まっているときは少量生成（ホバーエフェクト）
+                 particles.push(new Particle(mouse.x, mouse.y));
+            }
+        }
+
+        // 描画ループ
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 【変更】残像の透明度を0.7に設定し、軌跡を短くして負荷軽減
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 【重要：ぼかし効果を削除】
+            // ctx.filter = 'blur(1px)'; // 削除
+            
+            // パーティクルを生成
+            spawnParticles(); 
+
+            // パーティクルの更新と描画
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+
+                // 寿命が尽きたパーティクルを削除
+                if (p.life <= 0 || p.size < 0.2) {
+                    particles.splice(i, 1);
+                }
+            }
+            // ctx.filter = 'none'; // 削除
+        }
+
+        animate();
+    </script>
+</body>
+</html>
